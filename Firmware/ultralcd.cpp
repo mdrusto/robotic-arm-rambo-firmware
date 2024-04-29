@@ -2029,12 +2029,12 @@ void mFilamentItem(uint16_t nTemp, uint16_t nTempBed)
 static void mFilamentItem_farm()
 {
     bFilamentPreheatState = false;
-    mFilamentItem(FARM_PREHEAT_HOTEND_TEMP, FARM_PREHEAT_HPB_TEMP);
+    //mFilamentItem(FARM_PREHEAT_HOTEND_TEMP, FARM_PREHEAT_HPB_TEMP);
 }
 static void mFilamentItem_farm_nozzle()
 {
     bFilamentPreheatState = false;
-    mFilamentItem(FARM_PREHEAT_HOTEND_TEMP, 0);
+    //mFilamentItem(FARM_PREHEAT_HOTEND_TEMP, 0);
 }
 
 static void mFilamentItem_PLA()
@@ -3849,7 +3849,7 @@ void lcd_wizard(WizState state)
 			break;
 		case S::Xyz:
 			lcd_show_fullscreen_message_and_wait_P(_i("I will run xyz calibration now. It will take up to 24 mins."));////MSG_WIZARD_XYZ_CAL c=20 r=8
-			wizard_event = gcode_M45(false, 0);
+			//wizard_event = gcode_M45(false, 0);
 			state = (wizard_event ? S::Restore : S::Failed);
 			break;
 		case S::Z:
@@ -3860,7 +3860,7 @@ void lcd_wizard(WizState state)
 				lcd_show_fullscreen_message_and_wait_P(_T(MSG_PLACE_STEEL_SHEET));
 			}
 			lcd_show_fullscreen_message_and_wait_P(_i("I will run z calibration now."));////MSG_WIZARD_Z_CAL c=20 r=8
-			wizard_event = gcode_M45(true, 0);
+			//wizard_event = gcode_M45(true, 0);
 			if (!wizard_event) {
 				state = S::Failed;
 			} else {
@@ -5702,7 +5702,7 @@ void lcd_print_stop_finish()
         if (printingIsPaused())
         {
             // Restore temperature saved in ram after pausing print
-            restore_extruder_temperature_from_ram();
+            //restore_extruder_temperature_from_ram();
         }
 
         // If the pause state was cleared previously or the target temperature is 0°C in the case
