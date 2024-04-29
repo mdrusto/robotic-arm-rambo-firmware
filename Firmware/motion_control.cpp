@@ -56,7 +56,7 @@ void mc_arc(const float* position, float* target, const float* offset, float fee
     if (cs.arc_segments_per_sec > 0)
     {
         // 20200417 - FormerLurker - Implement MIN_ARC_SEGMENTS if it is defined - from Marlin 2.0 implementation
-        float mm_per_arc_segment_sec = (feed_rate / 60.0f) * (1.0f / cs.arc_segments_per_sec);
+        float mm_per_arc_segment_sec = feed_rate / (60.f * float(cs.arc_segments_per_sec));
         if (mm_per_arc_segment_sec < mm_per_arc_segment)
             mm_per_arc_segment = mm_per_arc_segment_sec;
     }

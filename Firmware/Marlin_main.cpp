@@ -303,7 +303,7 @@ static bool chdkActive = false;
 //! @{
 bool saved_printing = false; //!< Print is paused and saved in RAM
 uint32_t saved_sdpos = 0; //!< SD card position, or line number in case of USB printing
-uint8_t saved_printing_type = PowerPanic::PRINT_TYPE_SD;
+uint8_t saved_printing_type = PowerPanic::PRINT_TYPE_NONE;
 float saved_pos[NUM_AXIS] = { X_COORD_INVALID, 0, 0, 0 };
 uint16_t saved_feedrate2 = 0; //!< Default feedrate (truncated from float)
 static int saved_feedmultiply2 = 0;
@@ -508,8 +508,63 @@ bool __attribute__((noinline)) printer_active() {
         || (lcd_commands_type != LcdCommands::Idle)
         || MMU2::mmu2.MMU_PRINT_SAVED()
         || homing_flag
-        || mesh_bed_leveling_flag
-        || (eeprom_read_byte((uint8_t*)EEPROM_UVLO) != PowerPanic::NO_PENDING_RECOVERY);
+        || mesh_bed_leveling_flag;
+}
+
+#ifdef DEBUG_PRINTER_STATES
+//! @brief debug printer states
+//!
+//! This outputs a lot over serial and should be only used
+//! - when debugging LCD menus
+//! - or other functions related to these states
+//! To reduce the output feel free to comment out the lines you
+//! aren't troubleshooting.
+
+void debug_printer_states()
+{
+    printf_P(PSTR("DBG:printJobOngoing() = %d\n"), (int)printJobOngoing());
+    printf_P(PSTR("DBG:IS_SD_PRINTING = %d\n"), (int)IS_SD_PRINTING);
+    printf_P(PSTR("DBG:printer_recovering() = %d\n"), (int)printer_recovering());
+    printf_P(PSTR("DBG:heating_status = %d\n"), (int)heating_status);
+    printf_P(PSTR("DBG:GetPrinterState() = %d\n"), (int)GetPrinterState());
+    printf_P(PSTR("DBG:babystep_allowed_strict() = %d\n"), (int)babystep_allowed_strict());
+    printf_P(PSTR("DBG:lcd_commands_type = %d\n"), (int)lcd_commands_type);
+    printf_P(PSTR("DBG:farm_mode = %d\n"), (int)farm_mode);
+    printf_P(PSTR("DBG:moves_planned() = %d\n"), (int)moves_planned());
+    printf_P(PSTR("DBG:Stopped = %d\n"), (int)Stopped);
+    printf_P(PSTR("DBG:usb_timer.running() = %d\n"), (int)usb_timer.running());
+    printf_P(PSTR("DBG:M79_timer_get_status() = %d\n"), (int)M79_timer_get_status());
+    printf_P(PSTR("DBG:print_job_timer.isRunning() = %d\n"), (int)print_job_timer.isRunning());
+    printf_P(PSTR("DBG:printingIsPaused() = %d\n"), (int)printingIsPaused());
+    printf_P(PSTR("DBG:did_pause_print = %d\n"), (int)did_pause_print);
+    printf_P(PSTR("DBG:print_job_timer.isPaused() = %d\n"), (int)print_job_timer.isPaused());
+    printf_P(PSTR("DBG:saved_printing = %d\n"), (int)saved_printing);
+    printf_P(PSTR("DBG:saved_printing_type = %d\n"), (int)saved_printing_type);
+    printf_P(PSTR("DBG:homing_flag = %d\n"), (int)homing_flag);
+    printf_P(PSTR("DBG:mesh_bed_leveling_flag = %d\n"), (int)mesh_bed_leveling_flag);
+    printf_P(PSTR("DBG:get_temp_error() = %d\n"), (int)get_temp_error());
+    printf_P(PSTR("DBG:card.mounted = %d\n"), (int)card.mounted);
+    printf_P(PSTR("DBG:card.isFileOpen() = %d\n"), (int)card.isFileOpen());
+    printf_P(PSTR("DBG:fan_check_error = %d\n"), (int)fan_check_error);
+    printf_P(PSTR("DBG:processing_tcode = %d\n"), (int)processing_tcode);
+    printf_P(PSTR("DBG:nextSheet = %d\n"), (int)eeprom_next_initialized_sheet(eeprom_read_byte(&(EEPROM_Sheets_base->active_sheet))));
+    printf_P(PSTR("DBG:eFilamentAction = %d\n"), (int)eFilamentAction);
+    printf_P(PSTR("DBG:MMU2::mmu2.Enabled() = %d\n"), (int)MMU2::mmu2.Enabled());
+    printf_P(PSTR("DBG:MMU2::mmu2.MMU_PRINT_SAVED() = %d\n"), (int)MMU2::mmu2.MMU_PRINT_SAVED());
+    printf_P(PSTR("DBG:MMU2::mmu2.FindaDetectsFilament() = %d\n"), (int)MMU2::mmu2.FindaDetectsFilament());
+    printf_P(PSTR("DBG:fsensor.getFilamentPresent() = %d\n"), (int)fsensor.getFilamentPresent());
+    printf_P(PSTR("DBG:MMU CUTTER ENABLED = %d\n"), (int)eeprom_read_byte((uint8_t*)EEPROM_MMU_CUTTER_ENABLED));
+    printf_P(PSTR("DBG:fsensor.isEnabled() = %d\n"), (int)fsensor.isEnabled());
+    printf_P(PSTR("DBG:fsensor.getAutoLoadEnabled() = %d\n"), (int)fsensor.getAutoLoadEnabled());
+    printf_P(PSTR("DBG:custom_message_type = %d\n"), (int)custom_message_type);
+    printf_P(PSTR("DBG:uvlo_auto_recovery_ready = %d\n"), (int)uvlo_auto_recovery_ready);
+    SERIAL_ECHOLN("");
+}
+#endif //End DEBUG_PRINTER_STATES
+
+// Block LCD menus when
+bool __attribute__((noinline)) printer_recovering() {
+    return (eeprom_read_byte((uint8_t*)EEPROM_UVLO) != PowerPanic::NO_PENDING_RECOVERY);
 }
 
 // Currently only used in one place, allowed to be inlined
@@ -640,12 +695,12 @@ void crashdet_cancel() {
 
 void failstats_reset_print()
 {
-	eeprom_update_byte((uint8_t *)EEPROM_CRASH_COUNT_X, 0);
-	eeprom_update_byte((uint8_t *)EEPROM_CRASH_COUNT_Y, 0);
-	eeprom_update_byte((uint8_t *)EEPROM_FERROR_COUNT, 0);
-	eeprom_update_byte((uint8_t *)EEPROM_POWER_COUNT, 0);
-	eeprom_update_byte((uint8_t *)EEPROM_MMU_FAIL, 0);
-	eeprom_update_byte((uint8_t *)EEPROM_MMU_LOAD_FAIL, 0);
+	eeprom_update_byte_notify((uint8_t *)EEPROM_CRASH_COUNT_X, 0);
+	eeprom_update_byte_notify((uint8_t *)EEPROM_CRASH_COUNT_Y, 0);
+	eeprom_update_byte_notify((uint8_t *)EEPROM_FERROR_COUNT, 0);
+	eeprom_update_byte_notify((uint8_t *)EEPROM_POWER_COUNT, 0);
+	eeprom_update_byte_notify((uint8_t *)EEPROM_MMU_FAIL, 0);
+	eeprom_update_byte_notify((uint8_t *)EEPROM_MMU_LOAD_FAIL, 0);
 }
 
 void watchdogEarlyDisable(void) {
@@ -692,19 +747,19 @@ void softReset(void) {
 
 
 static void factory_reset_stats(){
-    eeprom_update_dword((uint32_t *)EEPROM_TOTALTIME, 0);
-    eeprom_update_dword((uint32_t *)EEPROM_FILAMENTUSED, 0);
+    eeprom_update_dword_notify((uint32_t *)EEPROM_TOTALTIME, 0);
+    eeprom_update_dword_notify((uint32_t *)EEPROM_FILAMENTUSED, 0);
 
     failstats_reset_print();
 
-    eeprom_update_word((uint16_t *)EEPROM_CRASH_COUNT_X_TOT, 0);
-    eeprom_update_word((uint16_t *)EEPROM_CRASH_COUNT_Y_TOT, 0);
-    eeprom_update_word((uint16_t *)EEPROM_FERROR_COUNT_TOT, 0);
-    eeprom_update_word((uint16_t *)EEPROM_POWER_COUNT_TOT, 0);
+    eeprom_update_word_notify((uint16_t *)EEPROM_CRASH_COUNT_X_TOT, 0);
+    eeprom_update_word_notify((uint16_t *)EEPROM_CRASH_COUNT_Y_TOT, 0);
+    eeprom_update_word_notify((uint16_t *)EEPROM_FERROR_COUNT_TOT, 0);
+    eeprom_update_word_notify((uint16_t *)EEPROM_POWER_COUNT_TOT, 0);
 
-    eeprom_update_word((uint16_t *)EEPROM_MMU_FAIL_TOT, 0);
-    eeprom_update_word((uint16_t *)EEPROM_MMU_LOAD_FAIL_TOT, 0);
-    eeprom_update_dword((uint32_t *)EEPROM_MMU_MATERIAL_CHANGES, 0);
+    eeprom_update_word_notify((uint16_t *)EEPROM_MMU_FAIL_TOT, 0);
+    eeprom_update_word_notify((uint16_t *)EEPROM_MMU_LOAD_FAIL_TOT, 0);
+    eeprom_update_dword_notify((uint32_t *)EEPROM_MMU_MATERIAL_CHANGES, 0);
 }
 
 // Factory reset function
@@ -840,7 +895,7 @@ static void fw_crash_init()
 #endif
     }
     // prevent crash prompts to reappear once acknowledged
-    eeprom_update_byte((uint8_t*)EEPROM_FW_CRASH_FLAG, 0xFF);
+    eeprom_update_byte_notify((uint8_t*)EEPROM_FW_CRASH_FLAG, 0xFF);
 }
 
 #define KILL_PENDING_FLAG 0x42
@@ -848,7 +903,7 @@ static void fw_crash_init()
 static void fw_kill_init() {
     if (eeprom_read_byte((uint8_t*)EEPROM_KILL_PENDING_FLAG) == KILL_PENDING_FLAG) {
         // clear pending message event
-        eeprom_write_byte((uint8_t*)EEPROM_KILL_PENDING_FLAG, EEPROM_EMPTY_VALUE);
+        eeprom_write_byte_notify((uint8_t*)EEPROM_KILL_PENDING_FLAG, EEPROM_EMPTY_VALUE);
 
         // display the kill message
         PGM_P kill_msg = (PGM_P)eeprom_read_word((uint16_t*)EEPROM_KILL_MESSAGE);
@@ -1007,15 +1062,16 @@ void setup()
 	eeprom_init_default_byte((uint8_t*)EEPROM_TEMP_CAL_ACTIVE, 0);
 
 	if (eeprom_read_byte((uint8_t*)EEPROM_CALIBRATION_STATUS_PINDA) == 255) {
-		//eeprom_write_byte((uint8_t*)EEPROM_CALIBRATION_STATUS_PINDA, 0);
-		eeprom_write_byte((uint8_t*)EEPROM_CALIBRATION_STATUS_PINDA, 1);
+		//eeprom_write_byte_notify((uint8_t*)EEPROM_CALIBRATION_STATUS_PINDA, 0);
+		eeprom_update_byte_notify((uint8_t*)EEPROM_CALIBRATION_STATUS_PINDA, 1);
 		int16_t z_shift = 0;
 		for (uint8_t i = 0; i < 5; i++) {
-			eeprom_update_word((uint16_t*)EEPROM_PROBE_TEMP_SHIFT + i, z_shift);
+			eeprom_update_word_notify((uint16_t*)EEPROM_PROBE_TEMP_SHIFT + i, z_shift);
 		}
-		eeprom_write_byte((uint8_t*)EEPROM_TEMP_CAL_ACTIVE, 0);
+		eeprom_update_byte_notify((uint8_t*)EEPROM_TEMP_CAL_ACTIVE, 0);
 	}
 	eeprom_init_default_byte((uint8_t*)EEPROM_UVLO, PowerPanic::NO_PENDING_RECOVERY);
+	eeprom_init_default_byte((uint8_t*)EEPROM_UVLO_Z_LIFTED, 0);
 	eeprom_init_default_byte((uint8_t*)EEPROM_SD_SORT, 0);
 
 	//mbl_mode_init();
@@ -1064,7 +1120,7 @@ void setup()
 static inline void crash_and_burn(dump_crash_reason reason)
 {
     WRITE(BEEPER, HIGH);
-    eeprom_update_byte((uint8_t*)EEPROM_FW_CRASH_FLAG, (uint8_t)reason);
+    eeprom_update_byte_notify((uint8_t*)EEPROM_FW_CRASH_FLAG, (uint8_t)reason);
 #ifdef EMERGENCY_DUMP
     xfdump_full_dump_and_reset(reason);
 #elif defined(EMERGENCY_SERIAL_DUMP)
@@ -1409,7 +1465,7 @@ bool calibrate_z_auto()
 #endif //TMC2130
 
 #ifdef TMC2130
-static void check_Z_crash(void)
+void check_Z_crash(void)
 {
 	if (!READ(Z_TMC2130_DIAG)) { //Z crash
 		FORCE_HIGH_POWER_END;
@@ -2106,63 +2162,54 @@ void process_commands()
         if (farm_prusa_code_seen()) {}
         else if(code_seen_P(PSTR("FANPINTST"))) {
             gcode_PRUSA_BadRAMBoFanTest();
-        }
-        else if (code_seen_P(PSTR("FAN"))) { // PRUSA FAN
+        } else if (code_seen_P(PSTR("FAN"))) { // PRUSA FAN
             printf_P(_N("E0:%d RPM\nPRN0:%d RPM\n"), 60*fan_speed[0], 60*fan_speed[1]);
-        }
-        else if (code_seen_P(PSTR("uvlo"))) // PRUSA uvlo
-        {
-            if (eeprom_read_byte((uint8_t*)EEPROM_UVLO_PRINT_TYPE) == PowerPanic::PRINT_TYPE_SD)
-            {
+        } else if (code_seen_P(PSTR("uvlo"))) { // PRUSA uvlo
+            if (eeprom_read_byte((uint8_t*)EEPROM_UVLO_PRINT_TYPE) == PowerPanic::PRINT_TYPE_SD) {
                 // M24 - Start SD print
                 enquecommand_P(MSG_M24);
 
                 // Print is recovered, clear the recovery flag
-                eeprom_update_byte((uint8_t*)EEPROM_UVLO, PowerPanic::NO_PENDING_RECOVERY);
-            }
-            else if (eeprom_read_byte((uint8_t*)EEPROM_UVLO_PRINT_TYPE) == PowerPanic::PRINT_TYPE_HOST)
-            {
+                eeprom_update_byte_notify((uint8_t*)EEPROM_UVLO, PowerPanic::NO_PENDING_RECOVERY);
+                eeprom_update_byte_notify((uint8_t*)EEPROM_UVLO_Z_LIFTED, 0);
+            } else if (eeprom_read_byte((uint8_t*)EEPROM_UVLO_PRINT_TYPE) == PowerPanic::PRINT_TYPE_HOST) {
                 // For Host prints we need to start the timer so that the pause has any effect
                 // this will allow g-codes to be processed while in the paused state
                 // For SD prints, M24 starts the timer
                 print_job_timer.start();
+                usb_timer.start();
 
                 // Park the extruder to the side and don't resume the print
                 // we must assume that the host as not fully booted up at this point
                 lcd_pause_print();
             }
-        }
-		else if (code_seen_P(PSTR("MMURES"))) // PRUSA MMURES
-		{
-			MMU2::mmu2.Reset(MMU2::MMU2::Software);
-		}
-		else if (code_seen_P(PSTR("RESET"))) { // PRUSA RESET
+        } else if (code_seen_P(PSTR("MMURES"))) { // PRUSA MMURES
+            MMU2::mmu2.Reset(MMU2::MMU2::Software);
+        } else if (code_seen_P(PSTR("RESET"))) { // PRUSA RESET
 #if defined(XFLASH) && defined(BOOTAPP)
             boot_app_magic = 0;
 #endif //defined(XFLASH) && defined(BOOTAPP)
             softReset();
-    }
-    else if (code_seen_P(PSTR("SN"))) { // PRUSA SN
-        char SN[20];
-        eeprom_read_block(SN, (uint8_t*)EEPROM_PRUSA_SN, 20);
-        if (SN[19])
-            puts_P(PSTR("SN invalid"));
-        else
-            puts(SN);
-    }
-    else if(code_seen_P(PSTR("Fir"))){ // PRUSA Fir
+        } else if (code_seen_P(PSTR("SN"))) { // PRUSA SN
+            char SN[20];
+            eeprom_read_block(SN, (uint8_t*)EEPROM_PRUSA_SN, 20);
+            if (SN[19])
+                puts_P(PSTR("SN invalid"));
+            else
+                puts(SN);
+        } else if(code_seen_P(PSTR("Fir"))){ // PRUSA Fir
 
-      SERIAL_PROTOCOLLNPGM(FW_VERSION_FULL);
+            SERIAL_PROTOCOLLNPGM(FW_VERSION_FULL);
 
     } else if(code_seen_P(PSTR("Rev"))){ // PRUSA Rev
 
       SERIAL_PROTOCOLLNPGM(FILAMENT_SIZE "-" ELECTRONICS "-" NOZZLE_TYPE );
 
     } else if(code_seen_P(PSTR("Lang"))) { // PRUSA Lang
-	  lang_reset();
+        lang_reset();
 
-	} else if(code_seen_P(PSTR("Lz"))) { // PRUSA Lz
-      eeprom_update_word(reinterpret_cast<uint16_t *>(&(EEPROM_Sheets_base->s[(eeprom_read_byte(&(EEPROM_Sheets_base->active_sheet)))].z_offset)),0);
+    } else if(code_seen_P(PSTR("Lz"))) { // PRUSA Lz
+      eeprom_update_word_notify(reinterpret_cast<uint16_t *>(&(EEPROM_Sheets_base->s[(eeprom_read_byte(&(EEPROM_Sheets_base->active_sheet)))].z_offset)),0);
 
     } else if(code_seen_P(PSTR("FR"))) { // PRUSA FR
         // Factory full reset
@@ -2179,21 +2226,17 @@ void process_commands()
             }
         }
     } else if (code_seen_P(PSTR("nozzle"))) { // PRUSA nozzle
-          uint16_t nDiameter;
-          if(code_seen('D'))
-               {
-               nDiameter=(uint16_t)(code_value()*1000.0+0.5); // [,um]
-               nozzle_diameter_check(nDiameter);
-               }
-          else if(code_seen_P(PSTR("set")) && farm_mode)
-               {
-               strchr_pointer++;                  // skip 1st char (~ 's')
-               strchr_pointer++;                  // skip 2nd char (~ 'e')
-               nDiameter=(uint16_t)(code_value()*1000.0+0.5); // [,um]
-               eeprom_update_byte((uint8_t*)EEPROM_NOZZLE_DIAMETER,(uint8_t)ClNozzleDiameter::_Diameter_Undef); // for correct synchronization after farm-mode exiting
-               eeprom_update_word((uint16_t*)EEPROM_NOZZLE_DIAMETER_uM,nDiameter);
-               }
-          else SERIAL_PROTOCOLLN((float)eeprom_read_word((uint16_t*)EEPROM_NOZZLE_DIAMETER_uM)/1000.0);
+            uint16_t nDiameter;
+            if(code_seen('D')) {
+                nDiameter=(uint16_t)(code_value()*1000.0+0.5); // [,um]
+                nozzle_diameter_check(nDiameter);
+            } else if(code_seen_P(PSTR("set")) && farm_mode) {
+                strchr_pointer++;                  // skip 1st char (~ 's')
+                strchr_pointer++;                  // skip 2nd char (~ 'e')
+                nDiameter=(uint16_t)(code_value()*1000.0+0.5); // [,um]
+                eeprom_update_byte_notify((uint8_t*)EEPROM_NOZZLE_DIAMETER,(uint8_t)ClNozzleDiameter::_Diameter_Undef); // for correct synchronization after farm-mode exiting
+                eeprom_update_word_notify((uint16_t*)EEPROM_NOZZLE_DIAMETER_uM,nDiameter);
+            } else SERIAL_PROTOCOLLN((float)eeprom_read_word((uint16_t*)EEPROM_NOZZLE_DIAMETER_uM)/1000.0);
     }
   }
   else if(*CMDBUFFER_CURRENT_STRING == 'G')
@@ -2432,7 +2475,7 @@ void process_commands()
             // - they need to see the filename on the status screen instead of "Wait for user..."
             // So we won't update the message in farm mode...
             if( ! farm_mode){
-                LCD_MESSAGERPGM(_i("Wait for user..."));////MSG_USERWAIT c=20
+                LCD_MESSAGERPGM(_T(MSG_USERWAIT));
             } else {
                 custom_message_type = CustomMsg::Status; // let the lcd display the name of the printed G-code file in farm mode
             }
@@ -2463,7 +2506,7 @@ void process_commands()
     */
 
     case 17:
-        LCD_MESSAGERPGM(_i("No move."));////MSG_NO_MOVE c=20
+        LCD_MESSAGERPGM(_T(MSG_NO_MOVE));
         enable_x();
         enable_y();
         enable_z();
@@ -2612,9 +2655,12 @@ void process_commands()
                 SetHostStatusScreenName(str.GetUnquotedString());
             }
         }
+#ifdef DEBUG_PRINTER_STATES
+        debug_printer_states();
+#endif //DEBUG_PRINTER_STATES
 
         if (eeprom_read_byte((uint8_t*)EEPROM_UVLO_PRINT_TYPE) == PowerPanic::PRINT_TYPE_HOST
-           && eeprom_read_byte((uint8_t*)EEPROM_UVLO) != PowerPanic::NO_PENDING_RECOVERY
+           && printer_recovering()
            && printingIsPaused()) {
             // The print is in a paused state. The print was recovered following a power panic
             // but up to this point the printer has been waiting for the M79 from the host
@@ -2967,8 +3013,9 @@ void process_commands()
           SERIAL_ECHOPGM(" EXTRUDER_COUNT:" STRINGIFY(EXTRUDERS));
 #ifdef MACHINE_UUID
           SERIAL_ECHOPGM(" UUID:");
-          SERIAL_ECHOLNPGM(MACHINE_UUID);
+          SERIAL_ECHOPGM(MACHINE_UUID);
 #endif //MACHINE_UUID
+          SERIAL_ECHOLNPGM("");
 #ifdef EXTENDED_CAPABILITIES_REPORT
           extended_capabilities_report();
 #endif //EXTENDED_CAPABILITIES_REPORT
@@ -3698,6 +3745,7 @@ void process_commands()
     }
     break;
 
+#ifdef TMC2130
 #ifdef TMC2130_SERVICE_CODES_M910_M918
 
     /*!
@@ -3758,6 +3806,7 @@ void process_commands()
         }
     }
     break;
+#endif // TMC2130_SERVICE_CODES_M910_M918
 
     /*!
 	### M913 - Print TMC2130 currents <a href="https://reprap.org/wiki/G-code#M913:_Print_TMC2130_currents">M913: Print TMC2130 currents</a>
@@ -3770,7 +3819,6 @@ void process_commands()
     }
     break;
 
-#endif // TMC2130_SERVICE_CODES_M910_M918
    /*!
 	### M914 - Set TMC2130 normal mode <a href="https://reprap.org/wiki/G-code#M914:_Set_TMC2130_normal_mode">M914: Set TMC2130 normal mode</a>
   Updates EEPROM only if "P" is given, otherwise temporary (lasts until reset or motor idle timeout)
@@ -3797,7 +3845,6 @@ void process_commands()
     - `R` - Revert to EEPROM value
     - `Q` - Print effective silent/normal status. (Does not report override)
     */
-#ifdef TMC2130
     case 914:
     case 915:
     {
@@ -3810,7 +3857,7 @@ void process_commands()
     else if (code_seen('P'))
     {
         uint8_t newMenuMode = (mcode_in_progress==914) ? SILENT_MODE_NORMAL : SILENT_MODE_STEALTH;
-        eeprom_update_byte((unsigned char *)EEPROM_SILENT, newMenuMode);
+        eeprom_update_byte_notify((unsigned char *)EEPROM_SILENT, newMenuMode);
         SilentModeMenu = newMenuMode;
         //printf_P(_n("tmc2130mode/smm/eep: %d %d %d %d"),tmc2130_mode,SilentModeMenu,eeprom_read_byte((uint8_t*)EEPROM_SILENT), bEnableForce_z);
     }
@@ -3836,7 +3883,6 @@ void process_commands()
     }
     break;
 
-#endif // TMC2130
 #ifdef TMC2130_SERVICE_CODES_M910_M918
     /*!
     ### M916 - Set TMC2130 Stallguard sensitivity threshold <a href="https://reprap.org/wiki/G-code#M916:_Set_TMC2130_Stallguard_sensitivity_threshold">M916: Set TMC2130 Stallguard sensitivity threshold</a>
@@ -3909,6 +3955,7 @@ void process_commands()
     break;
 
 #endif //TMC2130_SERVICE_CODES_M910_M918
+#endif // TMC2130
 
     /*!
 	### M350 - Set microstepping mode <a href="https://reprap.org/wiki/G-code#M350:_Set_microstepping_mode">M350: Set microstepping mode</a>
@@ -4603,7 +4650,7 @@ void prepare_move(uint16_t start_segment_idx)
 void prepare_arc_move(bool isclockwise, uint16_t start_segment_idx) {
     float r = hypot(offset[X_AXIS], offset[Y_AXIS]); // Compute arc radius for mc_arc
     // Trace the arc
-    mc_arc(current_position, destination, offset, feedrate * feedmultiply / 60 / 100.0, r, isclockwise, start_segment_idx);
+    mc_arc(current_position, destination, offset, (feedrate * feedmultiply) * (1.f / 6000.f), r, isclockwise, start_segment_idx);
     // As far as the parser is concerned, the position is now == target. In reality the
     // motion control system might still be processing the action and the real tool position
     // in any intermediate location.
@@ -4672,7 +4719,7 @@ static void handleSafetyTimer()
     else if (safetyTimer.expired(farm_mode?FARM_DEFAULT_SAFETYTIMER_TIME_ms:safetytimer_inactive_time))
     {
         disable_heater();
-        lcd_show_fullscreen_message_and_wait_P(_i("Heating disabled by safety timer."));////MSG_BED_HEATING_SAFETY_DISABLED c=20 r=4
+        lcd_show_fullscreen_message_and_wait_P(_T(MSG_BED_HEATING_SAFETY_DISABLED));
     }
 }
 #endif //SAFETYTIMER
@@ -4811,8 +4858,8 @@ void kill(const char *full_screen_message) {
     }
 
     // update eeprom with the correct kill message to be shown on startup
-    eeprom_write_word((uint16_t*)EEPROM_KILL_MESSAGE, (uint16_t)full_screen_message);
-    eeprom_write_byte((uint8_t*)EEPROM_KILL_PENDING_FLAG, KILL_PENDING_FLAG);
+    eeprom_write_word_notify((uint16_t*)EEPROM_KILL_MESSAGE, (uint16_t)full_screen_message);
+    eeprom_write_byte_notify((uint8_t*)EEPROM_KILL_PENDING_FLAG, KILL_PENDING_FLAG);
 
     softReset();
 }
@@ -5024,8 +5071,8 @@ void save_statistics() {
     uint32_t _previous_time = eeprom_init_default_dword((uint32_t *)EEPROM_TOTALTIME, 0);        //_previous_time unit: min
 
     uint32_t time_minutes = print_job_timer.duration() / 60;
-    eeprom_update_dword((uint32_t *)EEPROM_TOTALTIME, _previous_time + time_minutes); // EEPROM_TOTALTIME unit: min
-    eeprom_update_dword((uint32_t *)EEPROM_FILAMENTUSED, _previous_filament + (total_filament_used / 1000));
+    eeprom_update_dword_notify((uint32_t *)EEPROM_TOTALTIME, _previous_time + time_minutes); // EEPROM_TOTALTIME unit: min
+    eeprom_update_dword_notify((uint32_t *)EEPROM_FILAMENTUSED, _previous_filament + (total_filament_used / 1000));
 
     print_job_timer.reset();
     total_filament_used = 0;
@@ -5086,7 +5133,7 @@ void check_babystep()
 	if ((babystep_z < Z_BABYSTEP_MIN) || (babystep_z > Z_BABYSTEP_MAX)) {
 		babystep_z = 0; //if babystep value is out of min max range, set it to 0
 		SERIAL_ECHOLNPGM("Z live adjust out of range. Setting to 0");
-		eeprom_write_word(reinterpret_cast<uint16_t *>(&(EEPROM_Sheets_base->
+		eeprom_write_word_notify(reinterpret_cast<uint16_t *>(&(EEPROM_Sheets_base->
             s[(eeprom_read_byte(&(EEPROM_Sheets_base->active_sheet)))].z_offset)),
                     babystep_z);
 		lcd_show_fullscreen_message_and_wait_P(PSTR("Z live adjust out of range. Setting to 0. Click to continue."));
@@ -5913,7 +5960,8 @@ void restore_print_from_ram_and_continue(float e_move)
 	set_destination_to_current();
 
     restore_print_file_state();
-
+    eeprom_update_byte_notify((uint8_t*)EEPROM_UVLO, PowerPanic::NO_PENDING_RECOVERY);
+    eeprom_update_byte_notify((uint8_t*)EEPROM_UVLO_Z_LIFTED, 0);
 	lcd_setstatuspgm(MSG_WELCOME);
     saved_printing_type = PowerPanic::PRINT_TYPE_NONE;
 	saved_printing = false;
@@ -5923,7 +5971,8 @@ void restore_print_from_ram_and_continue(float e_move)
 // Cancel the state related to a currently saved print
 void cancel_saved_printing()
 {
-    eeprom_update_byte((uint8_t*)EEPROM_UVLO, PowerPanic::NO_PENDING_RECOVERY);
+    eeprom_update_byte_notify((uint8_t*)EEPROM_UVLO, PowerPanic::NO_PENDING_RECOVERY);
+    eeprom_update_byte_notify((uint8_t*)EEPROM_UVLO_Z_LIFTED, 0);
     saved_start_position[0] = SAVED_START_POSITION_UNSET;
     saved_printing_type = PowerPanic::PRINT_TYPE_NONE;
     saved_printing = false;
@@ -6003,7 +6052,7 @@ void M600_wait_for_user() {
 				delay_keep_alive(4);
 
 				if (_millis() > waiting_start_time + (unsigned long)M600_TIMEOUT * 1000) {
-					lcd_display_message_fullscreen_P(_i("Press the knob to preheat nozzle and continue."));////MSG_PRESS_TO_PREHEAT c=20 r=4
+					lcd_display_message_fullscreen_P(_T(MSG_PRESS_TO_PREHEAT));
 					wait_for_user_state = 1;
 					setTargetHotend(0);
 					st_synchronize();

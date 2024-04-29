@@ -14,10 +14,10 @@
 #define PRINTER_MMU_TYPE PRINTER_MK3S_MMU3
 #define PRINTER_MMU_NAME PRINTER_MK3S_MMU3_NAME
 #define FILAMENT_SIZE "1_75mm_MK3S"
-#define NOZZLE_TYPE "E3Dv6full"
+#define NOZZLE_TYPE "E3DREVO_HF_60W"
 
 // Printer name
-#define CUSTOM_MENDEL_NAME "Prusa i3 MK3S"
+#define CUSTOM_MENDEL_NAME "Prusa MK3S+RHF60"
 
 // Electronics
 #define MOTHERBOARD BOARD_EINSY_1_0a
@@ -329,20 +329,18 @@
 #define  DEFAULT_Ki 1.60
 #define  DEFAULT_Kd 73.76
 #else
-// Define PID constants for extruder
-//#define  DEFAULT_Kp 40.925
-//#define  DEFAULT_Ki 4.875
-//#define  DEFAULT_Kd 86.085
-#define  DEFAULT_Kp 16.13
-#define  DEFAULT_Ki 1.1625
-#define  DEFAULT_Kd 56.23
+// Define PID constants for E3D REVO HF 60W
+#define  MAX_OVERSHOOT_PID_AUTOTUNE 30
+#define  DEFAULT_Kp 15.00
+#define  DEFAULT_Ki 2.9
+#define  DEFAULT_Kd 19.2
 #endif
 
 // Extrude mintemp
 #define EXTRUDE_MINTEMP 175
 
 // Quick nozzle change supported
-//#define QUICK_NOZZLE_CHANGE
+#define QUICK_NOZZLE_CHANGE
 
 // Extruder cooling fans
 #define EXTRUDER_0_AUTO_FAN_PIN   8
@@ -420,8 +418,8 @@
 
 #define THERMAL_MODEL_Ta_corr -7     // Default ambient temperature correction
 
-#include "thermal_model/e3d_v6.h"
-#define THERMAL_MODEL_DEFAULT E3D_V6 // Default model parameters
+#include "thermal_model/e3d_REVO_HF_60W.h"
+#define THERMAL_MODEL_DEFAULT E3D_REVO_HF_60W // Default E3D REVO HF 60W model parameters
 
 /*------------------------------------
  HOST FEATURES
